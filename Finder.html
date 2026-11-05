@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Novell - Нейросеть</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #2b2b2b; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 10px; }
+  .chat-container { width: 100%; max-width: 700px; height: 90vh; background: #1e1e1e; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #3a3a3a; }
+  .header { background: #333333; padding: 15px 20px; text-align: center; color: #e0e0e0; border-bottom: 1px solid #444; }
+  .header h1 { font-size: 20px; font-weight: 600; letter-spacing: 1px; }
+  .header p { font-size: 12px; color: #999; margin-top: 4px; }
+  .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #1e1e1e; }
+  .msg { max-width: 85%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 15px; word-wrap: break-word; white-space: pre-wrap; }
+  .user { align-self: flex-end; background: #383838; color: #ffffff; border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-start; background: #2d2d2d; color: #dcdcdc; border-bottom-left-radius: 4px; border: 1px solid #404040; }
+  .error { background: #3d2a2a; border: 1px solid #5a3a3a; color: #ff9999; }
+  .input-area { display: flex; padding: 15px; background: #262626; gap: 10px; border-top: 1px solid #3a3a3a; }
+  #userInput { flex: 1; padding: 12px 16px; border-radius: 20px; border: 1px solid #444; background: #333; color: #fff; outline: none; font-size: 15px; transition: border 0.2s; }
+  #userInput:focus { border-color: #777; }
+  button { padding: 0 20px; border: none; border-radius: 20px; background: #4a4a4a; color: white; font-weight: bold; cursor: pointer; font-size: 15px; transition: background 0.2s; }
+  button:hover { background: #5a5a5a; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .messages::-webkit-scrollbar { width: 6px; }
+  .messages::-webkit-scrollbar-track { background: #1e1e1e; }
+  .messages::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="chat-container">
+  <div class="header"><h1>Novell</h1><p>Нейросеть (Alpha)</p></div>
+  <div class="messages" id="messages">
+    <div class="msg bot">Привет! Я Novell умная нейросеть. Задай мне любой вопрос!</div>
+  </div>
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Напиши сообщение..." autocomplete="off">
+    <button id="sendBtn" onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<script>
+// ⚠️ ВСТАВЬ СЮДА СВОЙ TRIAL KEY ОТ COHERE
+const API_KEY = 'bBw99Eo8DBpyoK0O2OD3Sok7DGuJSs0Ux8gAHIzJ';
+
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+
+let conversation = [
+  { role: "SYSTEM", message: "Ты Novell — дружелюбная умная нейросеть. Отвечай на русском языке, чётко и по делу." }
+];
+
+function addMessage(text, who, extraClass = '') {
+  const div = document.createElement('div');
+  div.className = 'msg ' + who + (extraClass ? ' ' + extraClass : '');
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  if (API_KEY.includes('ВСТАВЬ')) {
+    addMessage('⚠️ Ты не вставил ключ от Cohere в код!', 'bot', 'error');
+    return;
+  }
+
+  addMessage(text, 'user');
+  conversation.push({ role: "USER", message: text });
+  
+  inputEl.value = '';
+  sendBtn.disabled = true;
+  const typing = addMessage('Novell думает...', 'bot');
+
+  try {
+    const response = await fetch('https://api.cohere.com/v1/chat', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + API_KEY.trim(),
+        'Content-Type': 'application/json',
+        'X-Client-Name': 'Novell-Web' // Этот заголовок помогает обойти блокировку CORS
+      },
+      body: JSON.stringify({
+        model: 'command-r7b-12-2024', // Самая новая рабочая модель
+        message: text,
+        chat_history: conversation.slice(0, -1),
+        preamble: "Ты Novell — дружелюбная умная нейросеть. Отвечай на русском языке, чётко и по делу."
+      })
+    });
+
+    // Проверяем, не вернул ли сервер HTML вместо JSON
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Сервер Cohere заблокировал запрос (ошибка CORS). Попробуй включить VPN.");
+    }
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(data.message || 'Ошибка сети ' + response.status);
+    }
+
+    const reply = data.text.trim();
+    typing.remove();
+    addMessage(reply, 'bot');
+    conversation.push({ role: "CHATBOT", message: reply });
+
+  } catch (err) {
+    typing.remove();
+    addMessage('❌ Ошибка: ' + err.message, 'bot', 'error');
+    conversation.pop(); 
+  } finally {
+    sendBtn.disabled = false;
+    inputEl.focus();
+  }
+}
+
+inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+</script>
+</body>
+</html>
